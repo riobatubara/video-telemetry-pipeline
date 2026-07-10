@@ -1,4 +1,4 @@
-module api-gateway/cmd
+module api-gateway
 
 go 1.25.0
 

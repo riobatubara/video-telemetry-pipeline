@@ -9,9 +9,9 @@ import (
 	"syscall"
 	"time"
 
-	"api-gateway/cmd/internal/config"
-	"api-gateway/cmd/internal/kafka"
-	"api-gateway/cmd/internal/validator"
+	"api-gateway/internal/config"
+	"api-gateway/internal/kafka"
+	"api-gateway/internal/validator"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
@@ -34,7 +34,7 @@ func main() {
 	maxConcurrentConnections := 50000
 	jobQueue := make(chan TelemetryJob, maxConcurrentConnections)
 
-	// Boot Confluent producer loop
+	// Start Kafka Producer
 	producer, err := kafka.NewProducer(cfg, 50000)
 	if err != nil {
 		log.Fatalf("Fatal system crash tracking configuration bootstrap parameters: %v", err)
@@ -128,7 +128,10 @@ func main() {
 		// Backpressure Valve Select Enginer
 		select {
 		case jobQueue <- job:
-			return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"status": "queued"})
+			return c.Status(fiber.StatusAccepted).JSON(fiber.Map{
+				"status": "queued",
+				"data":   job.Payload,
+			})
 		default:
 			log.Printf("[API-GATEWAY] API Gateway queue full! Rejecting incoming request.")
 			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{

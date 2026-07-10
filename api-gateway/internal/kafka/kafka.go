@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"api-gateway/cmd/internal/config"
-	"api-gateway/cmd/internal/validator"
+	"api-gateway/internal/config"
+	"api-gateway/internal/validator"
 
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 )
