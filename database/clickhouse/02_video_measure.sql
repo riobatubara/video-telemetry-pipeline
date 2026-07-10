@@ -22,6 +22,7 @@ CREATE TABLE video_measure (
   load                       Nullable(Int64),
   play                       Nullable(Int64),
   complete                   Nullable(Int64),
+  unload                     Nullable(Int64),
   error                      Nullable(String),
 
 
