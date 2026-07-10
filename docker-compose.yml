@@ -1,0 +1,103 @@
+services:
+  # Message Broker
+  kafka:
+    kafka:
+    image: apache/kafka:3.7.0
+    container_name: telemetry_kafka
+    ports:
+      - "19092:19092"
+    environment:
+      # Cluster Setup Configurations
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:9093'
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:19092'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:9092,EXTERNAL://localhost:19092'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT'
+      
+      # Cluster ID generation (Required for KRaft metadata log partition)
+      CLUSTER_ID: 'MkU3OEVBNTcwNTJDMTRGMk'
+      
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+    networks:
+      - telemetry_network
+
+  # Real-Time OLAP Storage (ClickHouse)
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3-alpine
+    container_name: telemetry_clickhouse
+    ports:
+      - "8123:8123" # HTTP client port
+      - "9000:9000" # Native client port (used by Flink and Go)
+    environment:
+      - CLICKHOUSE_DB=${CLICKHOUSE_DB}
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
+    volumes:
+      # Auto-executes 01, 02, and 03 schema
+      - ./database/clickhouse:/docker-entrypoint-initdb.d
+    networks:
+      - telemetry_network
+
+  # Analytics Mart Storage
+  postgres:
+    image: postgres:16-alpine
+    container_name: telemetry_mart_storage
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      # Auto-executes your analytics marts tables on startup
+      - ./database/postgres:/docker-entrypoint-initdb.d
+    networks:
+      - telemetry_network
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: telemetry_api_gateway
+    ports:
+      - "${API_PORT}:8080"
+    environment:
+      - API_PORT=8080
+      - KAFKA_BROKERS=${KAFKA_BROKERS}
+      - KAFKA_TOPIC_RAW=${KAFKA_TOPIC_RAW}
+      - KAFKA_TOPIC_DLQ=${KAFKA_TOPIC_DLQ}
+    depends_on:
+      - kafka
+    networks:
+      - telemetry_network
+
+  # Real-Time Stream Processor (PyFlink Worker)
+  stream-processor:
+    build:
+      context: ./stream-processor
+      dockerfile: Dockerfile
+    container_name: telemetry_stream_processor
+    environment:
+      - KAFKA_BROKERS=${KAFKA_BROKERS}
+      - KAFKA_TOPIC_RAW=${KAFKA_TOPIC_RAW}
+      - KAFKA_TOPIC_DLQ=${KAFKA_TOPIC_DLQ}
+      - CLICKHOUSE_HOST=${CLICKHOUSE_HOST}
+      - CLICKHOUSE_PORT=${CLICKHOUSE_PORT}
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
+      - CLICKHOUSE_DB=${CLICKHOUSE_DB}
+    depends_on:
+      - kafka
+      - clickhouse
+    networks:
+      - telemetry_network
+
+networks:
+  telemetry_network:
+    driver: bridge
