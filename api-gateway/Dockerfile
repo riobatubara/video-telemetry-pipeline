@@ -1,10 +1,10 @@
-FROM golang:1.25-alpine AS builder
+FROM golang:1.25-bookworm AS builder
 
-# Install C dependencies for librdkafka
-RUN apk add --no-cache \
-    gcc \
-    musl-dev \
-    librdkafka-dev
+RUN apt-get update && \
+    apt-get install -y \
+        gcc \
+        librdkafka-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -15,11 +15,14 @@ COPY . .
 
 RUN go build -o /app/api-gateway ./main.go
 
-FROM alpine:3.19
 
-RUN apk --no-cache add \
-    ca-certificates \
-    librdkafka
+FROM debian:bookworm-slim
+
+RUN apt-get update && \
+    apt-get install -y \
+        ca-certificates \
+        librdkafka1 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /root/
 
