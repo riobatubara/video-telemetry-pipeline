@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -65,7 +66,8 @@ func main() {
 					}
 
 					// Hand data to Confluent Kafka
-					success := producer.RoutePacket(job.Payload, job.IsValid)
+					fmt.Println(job.Payload)
+					success := producer.RoutePayload(job.Payload, job.IsValid)
 
 					// If successfully written and valid, track it in the Thread-Safe Registry
 					if success && job.IsValid && len(job.Payload) > 0 {
@@ -104,6 +106,8 @@ func main() {
 	app.Post("/api/v1/telemetry", func(c *fiber.Ctx) error {
 		body := c.Body()
 
+		serverTimestamp := time.Now().UnixMilli()
+
 		// Validate raw JSON structural layout boundaries
 		payloads, err := validator.ValidatePayload(body)
 
@@ -115,13 +119,19 @@ func main() {
 			// Malformed data setup -> Route to DLQ
 			job.IsValid = false
 			job.Payload = []validator.TelemetryPayload{{
-				TsClient: time.Now().UnixMilli(),
+				TsClient: serverTimestamp,
+				TsServer: serverTimestamp,
 				Sessid:   "MALFORMED_JSON_ERROR",
 				Event:    "MALFORMED",
 				Value:    string(body),
 			}}
 		} else {
 			job.IsValid = true
+
+			for i := range payloads {
+				payloads[i].TsServer = serverTimestamp
+			}
+
 			job.Payload = payloads
 		}
 
