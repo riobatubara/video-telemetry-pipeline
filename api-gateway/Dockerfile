@@ -1,5 +1,6 @@
 FROM golang:1.25-bookworm AS builder
 
+# Install C dependencies for librdkafka
 RUN apt-get update && \
     apt-get install -y \
         gcc \
