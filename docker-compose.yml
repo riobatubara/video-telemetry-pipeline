@@ -1,7 +1,6 @@
 services:
   # Message Broker
   kafka:
-    kafka:
     image: apache/kafka:3.7.0
     container_name: telemetry_kafka
     ports:
