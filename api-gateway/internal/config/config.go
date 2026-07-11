@@ -21,7 +21,7 @@ func LoadConfig() *Config {
 
 	apiKey := os.Getenv("API_KEY")
 	if apiKey == "" {
-		apiKey = "5vRSCBOv15e2Gpaaf1EAjD4yE9opWffR"
+		apiKey = "apikeysecret"
 	}
 
 	return &Config{
