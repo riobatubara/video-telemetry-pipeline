@@ -67,14 +67,14 @@ func (p *Producer) TrackSession(sessid string) {
 	p.activeSessions[sessid] = time.Now()
 }
 
-// RoutePacket serializes data maps and streams them into your backpressure queues
-func (p *Producer) RoutePacket(packets []validator.TelemetryPayload, isValid bool) bool {
+// RoutePayload serializes data maps and streams them into your backpressure queues
+func (p *Producer) RoutePayload(payloads []validator.TelemetryPayload, isValid bool) bool {
 	topic := p.cfg.KafkaTopicRaw
 	if !isValid {
 		topic = p.cfg.KafkaTopicDLQ
 	}
 
-	payloadBytes, err := json.Marshal(packets)
+	payloadBytes, err := json.Marshal(payloads)
 	if err != nil {
 		return false
 	}
@@ -87,9 +87,9 @@ func (p *Producer) RoutePacket(packets []validator.TelemetryPayload, isValid boo
 	// Backpressure Bound Checks
 	select {
 	case p.dataChan <- msg:
-		if isValid && len(packets) > 0 {
-			// Safely track session using the first packet's ID
-			p.TrackSession(packets[0].Sessid)
+		if isValid && len(payloads) > 0 {
+			// Safely track session using the first payloads's ID
+			p.TrackSession(payloads[0].Sessid)
 		}
 		return true
 	default:
