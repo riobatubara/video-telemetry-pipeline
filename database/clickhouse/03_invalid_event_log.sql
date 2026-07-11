@@ -7,8 +7,8 @@ CREATE TABLE invalid_event_log
     raw_payload    String                  -- The untouched broken text from the body)
 )
 ENGINE = MergeTree()
-PARTITION BY toYYYYMMDD(toDateTime64(tsserver / 1000, 3))
+PARTITION BY toYYYYMMDD(toDateTime(tsserver / 1000))
 ORDER BY (error_reason, tsserver)
 
 -- Keep for only 3 to 7 days
-TTL toDateTime64(tsserver / 1000, 3) + INTERVAL 3 DAY;
+TTL toDateTime(tsserver / 1000) + INTERVAL 3 DAY;

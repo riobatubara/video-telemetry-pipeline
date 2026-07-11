@@ -30,8 +30,8 @@ CREATE TABLE video_measure (
   tsserver                      Int64
 ) 
 ENGINE = MergeTree() 
-PARTITION BY toYYYYMM(toDateTime64(tsserver / 1000, 3)) 
+PARTITION BY toYYYYMM(toDateTime(tsserver / 1000))
 ORDER BY (video_id, tsclient, sessid)
 
 -- Automatic deletion rule (90 Days)
-TTL toDateTime64(tsserver / 1000, 3) + INTERVAL 90 DAY;
+TTL toDateTime(tsserver / 1000) + INTERVAL 90 DAY;
