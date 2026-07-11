@@ -8,6 +8,7 @@ import (
 // TelemetryPayload maps strictly to incoming client SDK data schema
 type TelemetryPayload struct {
 	TsClient int64  `json:"tsclient"`
+	TsServer int64  `json:"tsserver"`
 	Sessid   string `json:"sessid"`
 	Event    string `json:"event"`
 	Value    string `json:"value"`
