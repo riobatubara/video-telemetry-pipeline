@@ -6,7 +6,7 @@ import (
 )
 
 // TelemetryPayload maps strictly to incoming client SDK data schema
-type TelemetryPayload struct {
+type Payload struct {
 	TsClient int64  `json:"tsclient"`
 	TsServer int64  `json:"tsserver"`
 	Sessid   string `json:"sessid"`
@@ -15,20 +15,20 @@ type TelemetryPayload struct {
 }
 
 // ValidatePayload checks structural integrity and prevents dirty data execution leaks
-func ValidatePayload(body []byte) ([]TelemetryPayload, error) {
-	var TelemetryPayload []TelemetryPayload
+func ValidatePayload(body []byte) ([]Payload, error) {
+	var payloads []Payload
 
 	// Attempt raw layout verification
-	if err := json.Unmarshal(body, &TelemetryPayload); err != nil {
+	if err := json.Unmarshal(body, &payloads); err != nil {
 		return nil, err
 	}
 
-	if len(TelemetryPayload) == 0 {
-		return nil, errors.New("empty telemetry collection payload received")
+	if len(payloads) == 0 {
+		return nil, errors.New("empty telemetry collection payloads received")
 	}
 
 	// Validate vital session attributes inside elements
-	for _, payload := range TelemetryPayload {
+	for _, payload := range payloads {
 		if payload.TsClient <= 0 {
 			return nil, errors.New("malformed record payload missing or invalid tsclient timestamp")
 		}
@@ -43,5 +43,5 @@ func ValidatePayload(body []byte) ([]TelemetryPayload, error) {
 		}
 	}
 
-	return TelemetryPayload, nil
+	return payloads, nil
 }
