@@ -68,7 +68,7 @@ func (p *Producer) TrackSession(sessid string) {
 }
 
 // RoutePayload serializes data maps and streams them into your backpressure queues
-func (p *Producer) RoutePayload(payloads []validator.TelemetryPayload, isValid bool) bool {
+func (p *Producer) RoutePayload(payloads []validator.Payload, isValid bool) bool {
 	topic := p.cfg.KafkaTopicRaw
 	if !isValid {
 		topic = p.cfg.KafkaTopicDLQ
