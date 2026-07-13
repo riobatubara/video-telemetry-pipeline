@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -20,9 +19,9 @@ import (
 
 // Connection Worker Payload wrapper
 type TelemetryJob struct {
-	Ctx     context.Context
-	Payload []validator.TelemetryPayload
-	IsValid bool
+	Ctx      context.Context
+	Payloads []validator.Payload
+	IsValid  bool
 }
 
 func main() {
@@ -66,12 +65,17 @@ func main() {
 					}
 
 					// Hand data to Confluent Kafka
-					fmt.Println(job.Payload)
-					success := producer.RoutePayload(job.Payload, job.IsValid)
+					success := true
+					for _, p := range job.Payloads {
+						ok := producer.RoutePayload([]validator.Payload{p}, job.IsValid)
+						if !ok {
+							success = false
+						}
+					}
 
 					// If successfully written and valid, track it in the Thread-Safe Registry
-					if success && job.IsValid && len(job.Payload) > 0 {
-						activeSessionRegistry.Store(job.Payload[0].Sessid, time.Now())
+					if success && job.IsValid && len(job.Payloads) > 0 {
+						activeSessionRegistry.Store(job.Payloads[0].Sessid, time.Now())
 					}
 
 				case <-ctx.Done():
@@ -118,7 +122,7 @@ func main() {
 		if err != nil {
 			// Malformed data setup -> Route to DLQ
 			job.IsValid = false
-			job.Payload = []validator.TelemetryPayload{{
+			job.Payloads = []validator.Payload{{
 				TsClient: serverTimestamp,
 				TsServer: serverTimestamp,
 				Sessid:   "MALFORMED_JSON_ERROR",
@@ -132,7 +136,7 @@ func main() {
 				payloads[i].TsServer = serverTimestamp
 			}
 
-			job.Payload = payloads
+			job.Payloads = payloads
 		}
 
 		// Backpressure Valve Select Enginer
@@ -140,7 +144,7 @@ func main() {
 		case jobQueue <- job:
 			return c.Status(fiber.StatusAccepted).JSON(fiber.Map{
 				"status": "queued",
-				"data":   job.Payload,
+				"data":   job.Payloads,
 			})
 		default:
 			log.Printf("[API-GATEWAY] API Gateway queue full! Rejecting incoming request.")
