@@ -9,7 +9,7 @@ CREATE TABLE video_measure (
   video_id                      String,
   video_name                    String,
   tags                          String,
-  duration                      String,
+  duration                      Int64,
   
   -- THE REPEATING/DUPLICATE EVENTS (Stored as lists to capture everything)
   bitrate                  Array(String),   -- Stores: ['6000,128', '2400,128']
