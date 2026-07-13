@@ -16,7 +16,6 @@ COPY . .
 
 RUN go build -o /app/api-gateway ./main.go
 
-
 FROM debian:bookworm-slim
 
 RUN apt-get update && \
