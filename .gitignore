@@ -1,16 +1,14 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+
 # Python (PyFlink)
 __pycache__/
 *.py[cod]
 *$py.class
 .venv/
 venv/
-ENV/
 
 # IDEs
 .idea/
 .vscode/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.swp
