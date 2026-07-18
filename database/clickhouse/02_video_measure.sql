@@ -4,7 +4,9 @@ CREATE TABLE video_measure (
   duuid                         String,
   userid                        String,
   uadev                         String,
-  
+  geoip                         String,
+  sdk_ver                       String,
+
   -- CONTENT METADATA
   video_id                      String,
   video_name                    String,
@@ -29,7 +31,7 @@ CREATE TABLE video_measure (
   tsclient                      Int64,
   tsserver                      Int64
 ) 
-ENGINE = MergeTree() 
+ENGINE = ReplacingMergeTree() 
 PARTITION BY toYYYYMM(toDateTime(tsserver / 1000))
 ORDER BY (video_id, tsclient, sessid)
 
