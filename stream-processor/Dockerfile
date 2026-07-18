@@ -20,9 +20,11 @@ COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 COPY app.py .
+COPY src/ ./src/
 
 USER flink
 
-ENV PYTHONUNBUFFERED=1
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONPATH="/opt/flink/usrlib"
 
 CMD ["python3", "-u", "/opt/flink/usrlib/app.py"]
