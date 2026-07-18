@@ -20,9 +20,11 @@ from pyflink.table import StreamTableEnvironment, EnvironmentSettings
 # ------------------------------------------------------------------------
 KAFKA_BROKERS = os.getenv("KAFKA_BROKERS")
 TOPIC_RAW = os.getenv("KAFKA_TOPIC_RAW")
+TOPIC_DLQ = os.getenv("KAFKA_TOPIC_DLQ")
 
 # Increment the group ID string to bypass old checkpoint consumer positions
 GROUP_RAW = os.getenv("KAFKA_GROUP_RAW", "flink-raw-group") + "_clean_flat_v65"
+GROUP_DLQ = os.getenv("KAFKA_GROUP_DLQ", "flink-dlq-group") + "_clean_flat_v65"
 
 CLICKHOUSE_URL = f"clickhouse://{os.getenv('CLICKHOUSE_HOST')}:{os.getenv('CLICKHOUSE_PORT')}"
 CLICKHOUSE_DB = os.getenv('CLICKHOUSE_DB')
@@ -69,6 +71,26 @@ CREATE TABLE kafka_raw (
 """)
 
 t_env.execute_sql(f"""
+CREATE TABLE kafka_dlq (
+    tsclient BIGINT,
+    tsserver BIGINT,
+    sessid STRING,
+    event STRING,
+    `value` STRING
+) WITH (
+    'connector' = 'kafka',
+    'topic' = '{TOPIC_DLQ}',
+    'properties.bootstrap.servers' = '{KAFKA_BROKERS}',
+    'properties.group.id' = '{GROUP_DLQ}',
+    'scan.startup.mode' = 'earliest-offset',
+    'format' = 'json',
+    'json.fail-on-missing-field' = 'false',
+    'json.ignore-parse-errors' = 'true'
+)
+""")
+
+# ClickHouse Sinks
+t_env.execute_sql(f"""
 CREATE TABLE ch_event_log (
     tsclient BIGINT,
     tsserver BIGINT,
@@ -87,24 +109,70 @@ CREATE TABLE ch_event_log (
 )
 """)
 
+t_env.execute_sql(f"""
+CREATE TABLE ch_invalid_log (
+    tsserver BIGINT,
+    gateway_ip STRING,
+    uadev STRING,
+    error_reason STRING,
+    raw_payload STRING
+) WITH (
+    'connector' = 'clickhouse',
+    'url' = '{CLICKHOUSE_URL}',
+    'database-name' = '{CLICKHOUSE_DB}',
+    'table-name' = 'invalid_event_log',
+    'username' = '{CLICKHOUSE_USER}',
+    'password' = '{CLICKHOUSE_PASSWORD}',
+    'sink.batch-size' = '1',
+    'sink.flush-interval' = '1s'
+)
+""")
+
 # ------------------------------------------------------------------------
 # 5. STREAM PIPELINE EXECUTION
 # ------------------------------------------------------------------------
 print("\n🔥 Activating direct Kafka-to-ClickHouse stream...")
 
-# Capture the job execution table result handle
-table_result = t_env.execute_sql("""
+statement_set = t_env.create_statement_set()
+
+# Pipeline 1: Raw Stream Route
+# table_result = t_env.execute_sql("""
+# INSERT INTO ch_event_log
+# SELECT
+#     COALESCE(tsclient, 0),
+#     COALESCE(tsserver, 0),
+#     COALESCE(sessid, 'null'),
+#     COALESCE(event, 'unknown_event'),
+#     COALESCE(`value`, '')
+# FROM kafka_raw
+# """)
+statement_set.add_insert_sql("""
 INSERT INTO ch_event_log
 SELECT
     COALESCE(tsclient, 0),
     COALESCE(tsserver, 0),
-    COALESCE(sessid, 'mismatched_or_null'),
+    COALESCE(sessid, 'null'),
     COALESCE(event, 'unknown_event'),
     COALESCE(`value`, '')
 FROM kafka_raw
 """)
 
+# Pipeline 2: DLQ Route (Added safely alongside it)
+statement_set.add_insert_sql("""
+INSERT INTO ch_invalid_log
+SELECT 
+    COALESCE(tsserver, 0),
+    'API_INTERNAL_GATEWAY' AS gateway_ip,
+    'DLQ_ERROR_AGENT' AS uadev,
+    COALESCE(event, 'MALFORMED') AS error_reason,
+    COALESCE(`value`, '') AS raw_payload
+FROM kafka_dlq
+""")
+
+# Submit and block container thread active
+job_result = statement_set.execute()
 print("Job submitted successfully! Locking container thread active...")
+job_result.wait()
 
 # CRITICAL FIX: Blocks the python process from exiting so the stream stays alive
-table_result.wait()
+# table_result.wait()
