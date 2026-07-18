@@ -5,23 +5,31 @@ services:
     ports:
       - "19092:19092"
     environment:
-      # Cluster Setup Configurations
+      # KRaft
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: 'broker,controller'
       KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:9093'
-      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093'
-      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:9092'
+
+      # LISTENERS (FIX)
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9092,EXTERNAL://0.0.0.0:19092,CONTROLLER://0.0.0.0:9093'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:9092,EXTERNAL://localhost:19092'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT'
       KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT'
-      
-      # Cluster ID generation (Required for KRaft metadata log partition)
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+
+      # OPTIONAL
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+
+      # CLUSTER
       CLUSTER_ID: 'KzTRtFTTTAS7ZOaPQv9IQw'
-      
+      KAFKA_LOG_DIRS: '/var/lib/kafka/data'
+
+      # SINGLE NODE SAFE
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_LOG_DIRS: '/var/lib/kafka/data'
 
+      # RETENTION
       KAFKA_LOG_RETENTION_HOURS: 72
       KAFKA_LOG_RETENTION_BYTES: 1073741824
     volumes:
@@ -30,49 +38,43 @@ services:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/9092'"]
       interval: 10s
       timeout: 5s
-      retries: 3
+      retries: 5
       start_period: 10s
     networks:
       - telemetry_network
 
-  # Real-Time OLAP Storage (ClickHouse)
+  kafka-init:
+    image: apache/kafka:3.7.0
+    container_name: telemetry_kafka_init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "
+      echo 'Creating topics...';
+      /opt/kafka/bin/kafka-topics.sh --create --if-not-exists --topic ${KAFKA_TOPIC_RAW} --bootstrap-server kafka:9092 --partitions 3 --replication-factor 1;
+      /opt/kafka/bin/kafka-topics.sh --create --if-not-exists --topic ${KAFKA_TOPIC_DLQ} --bootstrap-server kafka:9092 --partitions 1 --replication-factor 1;
+      echo 'Topics ready';
+      "
+    networks:
+      - telemetry_network
+
+  # ClickHouse
   clickhouse:
     image: clickhouse/clickhouse-server:24.3-alpine
     container_name: telemetry_clickhouse
     ports:
-      - "8123:8123"                                       # HTTP client port
-      - "9000:9000"                                       # Native client port (used by Flink and Go)
+      - "8123:8123"
+      - "9000:9000"
     environment:
       - CLICKHOUSE_DB=${CLICKHOUSE_DB}
       - CLICKHOUSE_USER=${CLICKHOUSE_USER}
       - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
-      # - CLICKHOUSE_MAX_INSERT_BLOCK_SIZE=100000         -- production grade
-      # - CLICKHOUSE_MAX_THREADS=8                        -- production grade 
     volumes:
-      - ./database/clickhouse:/docker-entrypoint-initdb.d # Auto-executes 01, 02, and 03 schema
+      - ./database/clickhouse:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1'"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    networks:
-      - telemetry_network
-
-  # Analytics Mart Storage
-  postgres:
-    image: postgres:16-alpine
-    container_name: telemetry_mart_storage
-    ports:
-      - "${POSTGRES_PORT}:5432"
-    environment:
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-    volumes:
-      - ./database/postgres:/docker-entrypoint-initdb.d
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -96,10 +98,12 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     networks:
       - telemetry_network
 
-  # Real-Time Stream Processor (PyFlink Worker)
+  # Stream Processor
   stream-processor:
     build:
       context: ./stream-processor
@@ -119,10 +123,33 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       clickhouse:
         condition: service_healthy
     networks:
       - telemetry_network
+
+  # Video Analytics
+    # postgres:
+    #   image: postgres:16-alpine
+    #   container_name: telemetry_video_analytics
+    #   ports:
+    #     - "${POSTGRES_PORT}:5432"
+    #   environment:
+    #     - POSTGRES_DB=${POSTGRES_DB}
+    #     - POSTGRES_USER=${POSTGRES_USER}
+    #     - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    #   volumes:
+    #     - ./database/postgres:/docker-entrypoint-initdb.d
+    #   healthcheck:
+    #     test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+    #     interval: 10s
+    #     timeout: 5s
+    #     retries: 3
+    #     start_period: 10s
+    #   networks:
+    #     - telemetry_network
 
 networks:
   telemetry_network:
