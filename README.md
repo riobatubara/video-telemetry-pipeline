@@ -7,18 +7,12 @@
 
 docker compose --env-file .env up -d --build
 
+docker exec -it telemetry_kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic video.telemetry.raw
 
-docker exec -it telemetry_kafka /opt/kafka/bin/kafka-console-consumer.sh \
-  --bootstrap-server localhost:9092 \
-  --topic video.telemetry.raw \
-  --from-beginning
-
-docker exec -it telemetry_kafka /opt/kafka/bin/kafka-console-consumer.sh \
-  --bootstrap-server localhost:9092 \
-  --topic video.telemetry.dlq \
-  --from-beginning
+docker exec -it telemetry_kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic video.telemetry.dlq
 
 docker compose down stream-processor && docker compose up -d --build stream-processor
+docker build -t stream-processor ./stream-processor --no-cache
 
 docker exec -it telemetry_clickhouse clickhouse-client -q "SHOW TABLES"
 output:
