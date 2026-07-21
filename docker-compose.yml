@@ -103,6 +103,33 @@ services:
     networks:
       - telemetry_network
 
+  jobmanager:
+    image: flink:1.18.1-scala_2.12-java17
+    container_name: flink_jobmanager
+    command: jobmanager
+    ports:
+      - "8081:8081"
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+    networks:
+      - telemetry_network
+
+  taskmanager:
+    image: flink:1.18.1-scala_2.12-java17
+    container_name: flink_taskmanager
+    depends_on:
+      - jobmanager
+    command: taskmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 4
+    networks:
+      - telemetry_network
+
   # Stream Processor
   stream-processor:
     build:
@@ -127,6 +154,10 @@ services:
         condition: service_completed_successfully
       clickhouse:
         condition: service_healthy
+      jobmanager:
+        condition: service_started
+      taskmanager:
+        condition: service_started
     networks:
       - telemetry_network
 
