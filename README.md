@@ -20,10 +20,10 @@ event_log
 invalid_telemetry_log
 video_measure
 
-curl -X POST http://localhost:8080/api/v1/telemetry \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: apikeysecret" \
-  -d 'This is completely broken garbage data text'
+  curl -X POST http://localhost:8080/api/v1/telemetry \
+    -H "Content-Type: application/json" \
+    -H "X-API-Key: apikeysecret" \
+    -d 'This is completely broken garbage data text'
 docker exec -it telemetry_clickhouse clickhouse-client -q "SELECT error_reason, raw_payload FROM invalid_event_log FORMAT PrettyCompact"
 
 
